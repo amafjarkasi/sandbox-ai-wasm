@@ -284,44 +284,17 @@ const policy = {
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        SandboxAI                             │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   HTTP API  │  │  MCP Agent  │  │  Web Dashboard      │  │
-│  │   Server    │  │  Interface  │  │  (Real-time SSE)    │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
-│         │                │                     │             │
-│  ┌──────▼────────────────▼─────────────────────▼──────────┐  │
-│  │              Security Layer                              │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │  │
-│  │  │   API    │ │   Rate   │ │   CORS   │ │  Body    │  │  │
-│  │  │   Auth   │ │  Limiter │ │  Policy  │ │  Limit   │  │  │
-│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │  │
-│  └──────────────────────┬──────────────────────────────────┘  │
-│                         │                                     │
-│  ┌──────────────────────▼──────────────────────────────────┐  │
-│  │              Execution Queue                              │  │
-│  │     (Priority-based concurrency & timeout management)     │  │
-│  └──────────────────────┬──────────────────────────────────┘  │
-│                         │                                     │
-│  ┌──────────────────────▼──────────────────────────────────┐  │
-│  │              Sandbox Executor                             │  │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────┐  │  │
-│  │  │ Policy Engine│ │   Resource   │ │ Result Cache   │  │  │
-│  │  │(11 patterns) │ │   Monitor    │ │ (SHA256 keys)  │  │  │
-│  │  └──────────────┘ └──────────────┘ └────────────────┘  │  │
-│  └──────────────────────┬──────────────────────────────────┘  │
-│                         │                                     │
-│  ┌──────────────────────▼──────────────────────────────────┐  │
-│  │           Edge.js --safe (WASM Sandbox)                   │  │
-│  │  ┌─────┐ ┌─────┐ ┌───────┐ ┌──────────┐ ┌─────────┐   │  │
-│  │  │ V8  │ │ JSC │ │QuickJS│ │SpiderMonkey│ │ Hermes │   │  │
-│  │  └─────┘ └─────┘ └───────┘ └──────────┘ └─────────┘   │  │
-│  └─────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+![SandboxAI Architecture](public/architecture.png)
+
+**Layer Overview:**
+
+| Layer | Components | Purpose |
+|-------|------------|---------|
+| **Interfaces** | HTTP API Server, MCP Agent Interface, Web Dashboard | Entry points for code execution |
+| **Security Layer** | API Auth, Rate Limiter, CORS Policy, Body Limit | Request validation and protection |
+| **Execution Queue** | Priority-based queue with timeout management | Concurrency and resource management |
+| **Sandbox Executor** | Policy Engine, Resource Monitor, Result Cache | Secure code execution with caching |
+| **WASM Sandbox** | V8, JSC, QuickJS, SpiderMonkey, Hermes | Isolated JavaScript runtimes |
 
 ---
 
