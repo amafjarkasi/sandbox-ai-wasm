@@ -35,6 +35,7 @@ class Executor {
     this.resultCache = new Map();
     this.activeExecutions = new Map();
     this.cacheMaxSize = 100;
+    this.maxResults = 1000;
   }
 
   /**
@@ -44,7 +45,7 @@ class Executor {
     return code
       .replace(/\\/g, '\\\\')
       .replace(/`/g, '\\`')
-      .replace(/\\\$/g, '\\$');
+      .replace(/\$/g, '\\$');
   }
 
   /**
@@ -103,6 +104,18 @@ class Executor {
 
     // Start audit trail
     this.auditLogger.startExecutionAudit(id, { code, engine, policy, timeout, memory });
+
+    // Validate engine availability
+    const engineInfo = this.engineManager.getEngine(engine);
+    if (!engineInfo.available) {
+      return {
+        id,
+        status: "error",
+        error: `Engine '${engine}' is not available`,
+        durationMs: Math.round(performance.now() - startTime),
+        engine,
+      };
+    }
 
     // Perform dangerous code analysis
     const dangerAnalysis = this.policyEngine.analyzeDangerousCode(code);
@@ -191,7 +204,8 @@ class Executor {
           outputLength: result.output?.length,
         });
         this.auditLogger.completeExecutionAudit(id, finalResult);
-        this.results.set(id, finalResult);
+        this._storeResult(id, finalResult);
+        this.engineManager.recordUsage(engine);
         this.activeExecutions.delete(id);
         return finalResult;
       } catch (err) {
@@ -211,7 +225,7 @@ class Executor {
 
         this.auditLogger.logAction(id, "execution_error", { error: err.message });
         this.auditLogger.completeExecutionAudit(id, finalResult);
-        this.results.set(id, finalResult);
+        this._storeResult(id, finalResult);
         this.activeExecutions.delete(id);
         return finalResult;
       }
@@ -265,6 +279,17 @@ class Executor {
     });
 
     return id;
+  }
+
+  /**
+   * Store a result with eviction
+   */
+  _storeResult(id, result) {
+    if (this.results.size >= this.maxResults) {
+      const oldestKey = this.results.keys().next().value;
+      this.results.delete(oldestKey);
+    }
+    this.results.set(id, result);
   }
 
   /**

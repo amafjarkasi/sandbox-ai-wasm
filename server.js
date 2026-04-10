@@ -76,6 +76,24 @@ class RateLimiter {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
     this.requests = new Map();
+
+    // Periodically sweep stale entries to prevent unbounded growth
+    this._cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const windowStart = now - this.windowMs;
+      for (const [clientId, requests] of this.requests) {
+        const valid = requests.filter((time) => time > windowStart);
+        if (valid.length === 0) {
+          this.requests.delete(clientId);
+        } else {
+          this.requests.set(clientId, valid);
+        }
+      }
+    }, 60000);
+    // Don't let the cleanup timer prevent process exit
+    if (this._cleanupInterval.unref) {
+      this._cleanupInterval.unref();
+    }
   }
 
   isAllowed(clientId) {
@@ -163,8 +181,7 @@ function updateStats(result) {
     stats.failedExecutions++;
   }
   stats.engineUsage[result.engine] = (stats.engineUsage[result.engine] || 0) + 1;
-  // Use durationMs (new naming) with fallback to duration_ms (old naming)
-  const duration = result.durationMs || result.duration_ms || 0;
+  const duration = result.durationMs || 0;
   stats._totalDurationMs += duration;
   stats.averageDurationMs = Math.round(stats._totalDurationMs / stats.totalExecutions);
 }
@@ -332,6 +349,30 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const params = JSON.parse(body);
 
+      // Input validation
+      if (!params.code || typeof params.code !== "string") {
+        clearTimeout(requestTimeout);
+        jsonResponse(res, 400, { error: "Missing or invalid 'code' field (must be a string)" });
+        return;
+      }
+      const validEngines = ["v8", "jsc", "quickjs"];
+      if (params.engine && !validEngines.includes(params.engine)) {
+        clearTimeout(requestTimeout);
+        jsonResponse(res, 400, { error: `Invalid engine. Must be one of: ${validEngines.join(", ")}` });
+        return;
+      }
+      if (params.timeout !== undefined && (typeof params.timeout !== "number" || params.timeout <= 0)) {
+        clearTimeout(requestTimeout);
+        jsonResponse(res, 400, { error: "Invalid timeout (must be a positive number)" });
+        return;
+      }
+      const validPolicies = ["strict", "standard", "extended", "agent"];
+      if (params.policy && typeof params.policy === "string" && !validPolicies.includes(params.policy)) {
+        clearTimeout(requestTimeout);
+        jsonResponse(res, 400, { error: `Invalid policy. Must be one of: ${validPolicies.join(", ")}` });
+        return;
+      }
+
       logger.info("Executing code", {
         requestId,
         engine: params.engine,
@@ -354,7 +395,7 @@ const server = http.createServer(async (req, res) => {
       logger.info("Execution completed", {
         requestId,
         status: result.status,
-        durationMs: result.durationMs || result.duration_ms,
+        durationMs: result.durationMs,
       });
 
       clearTimeout(requestTimeout);
@@ -788,6 +829,16 @@ function renderSecurityDashboard() {
   </div>
 
   <script>
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     async function loadData() {
       try {
         const res = await fetch('/api/audit/security-summary');
@@ -802,14 +853,14 @@ function renderSecurityDashboard() {
         const findingsList = document.getElementById('findingsList');
         if (data.recentFindings && data.recentFindings.length > 0) {
           findingsList.innerHTML = data.recentFindings.map(f => \`
-            <div class="finding \${f.severity}">
+            <div class="finding \${escapeHtml(f.severity)}">
               <div class="finding-header">
-                <span class="finding-category">\${f.category}</span>
-                <span class="badge badge-\${f.severity}">\${f.severity}</span>
+                <span class="finding-category">\${escapeHtml(f.category)}</span>
+                <span class="badge badge-\${escapeHtml(f.severity)}">\${escapeHtml(f.severity)}</span>
               </div>
-              <div class="finding-desc">\${f.description}</div>
+              <div class="finding-desc">\${escapeHtml(f.description)}</div>
               <div style="color:#666;font-size:0.75rem;margin-top:0.5rem;">
-                \${new Date(f.timestamp).toLocaleString()} | \${f.executionId?.substring(0, 16)}...
+                \${new Date(f.timestamp).toLocaleString()} | \${escapeHtml(f.executionId?.substring(0, 16))}...
               </div>
             </div>
           \`).join('');
@@ -839,7 +890,7 @@ function renderSecurityDashboard() {
           .sort((a, b) => b[1] - a[1])
           .map(([name, count]) => \`
             <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-              <span>\${name}</span><span style="font-weight:600;">\${count}</span>
+              <span>\${escapeHtml(name)}</span><span style="font-weight:600;">\${count}</span>
             </div>
           \`).join('') || '<p style="color:#666;">No data</p>';
 
@@ -884,18 +935,31 @@ server.listen(PORT, HOST, () => {
 });
 
 // Graceful shutdown
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received, shutting down gracefully");
-  server.close(() => {
-    logger.info("Server closed");
-    process.exit(0);
-  });
-});
+function gracefulShutdown(signal) {
+  logger.info(`${signal} received, shutting down gracefully`);
 
-process.on("SIGINT", () => {
-  logger.info("SIGINT received, shutting down gracefully");
+  // Stop accepting new connections
   server.close(() => {
-    logger.info("Server closed");
+    logger.info("Server closed, cleaning up resources");
+
+    // Clean up stream manager timers and references
+    streamManager.destroy();
+
+    // Clear rate limiter cleanup interval
+    if (rateLimiter._cleanupInterval) {
+      clearInterval(rateLimiter._cleanupInterval);
+    }
+
+    logger.info("Shutdown complete");
     process.exit(0);
   });
-});
+
+  // Force shutdown after 10 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    logger.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
