@@ -1,51 +1,100 @@
 <div align="center">
 
-# 🔒 SandboxAI
+<img src="public/logo.png" alt="SandboxAI" width="180" />
+
+# SandboxAI
 
 **Secure AI Code Execution Platform — powered by Edge.js WASM Sandboxing**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Edge.js](https://img.shields.io/badge/runtime-Edge.js-7c3aed)](https://edge.codes)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/amafjarkasi/sandbox-ai-wasm/pulls)
 
-Execute untrusted JavaScript safely in isolated WASM sandboxes with
-multi-engine support, real-time streaming, security policy enforcement,
-and a built-in AI agent interface.
+Execute untrusted JavaScript safely in isolated WASM sandboxes with multi-engine support, real-time streaming, security policy enforcement, and a built-in AI agent interface.
+
+[Getting Started](#getting-started) •
+[API Reference](#api-reference) •
+[Security](#security-model) •
+[Examples](#examples) •
+[Configuration](#configuration)
 
 </div>
 
 ---
 
-## Why SandboxAI?
+## The Problem
 
-Running untrusted code is dangerous. SandboxAI wraps execution in Edge.js WASM containers, giving you:
+AI agents, online code judges, webhook handlers, and automation platforms all share the same need: **run code you don't trust**. Native `eval()` and `child_process.exec()` are attack vectors. Docker containers add latency and operational complexity. You need something in between — fast, secure, and embeddable.
 
-- **Hard isolation** — code runs in a WASM sandbox, not on your host OS
-- **Policy enforcement** — control network, filesystem, memory, and module access per-execution
-- **Threat detection** — 11 categories of dangerous patterns analyzed before execution
-- **Audit trail** — every execution is logged with full chain of custody
+## The Solution
 
-Perfect for AI agent tool-use, online code judges, webhook processors, and any workflow where you need to run code you don't trust.
+SandboxAI wraps code execution in **Edge.js WASM containers**, giving you process-level isolation without the overhead of containers or VMs:
+
+- **🔒 Hard Isolation** — code runs in a WASM sandbox, not on your host OS. No filesystem, network, or process access unless explicitly granted by policy.
+- **🛡️ Threat Detection** — 11 categories of dangerous patterns are analyzed and scored *before* execution. Known attack vectors (prototype pollution, command injection, eval tricks) are caught at the gate.
+- **⚡ Multi-Engine** — choose between V8 (fastest), JavaScriptCore (WebKit), or QuickJS (lightweight). Engine availability is validated before execution.
+- **📊 Full Audit Trail** — every execution produces a chain-of-custody log with timing, policy decisions, risk scores, and output. Persisted as async JSONL for zero event-loop impact.
+- **🤖 MCP-Compatible** — drop-in tool interface for AI agents following the [Model Context Protocol](https://modelcontextprotocol.io) standard.
 
 ---
 
-## Quick Start
+## Architecture
+
+<div align="center">
+<img src="public/architecture.png" alt="SandboxAI Architecture" width="800" />
+</div>
+
+### How a request flows
+
+1. **Ingress** — HTTP request hits the rate limiter (configurable window + max), then API key auth (optional), then CORS validation.
+2. **Validation** — Request body is parsed and validated: `code` must be a non-empty string, `engine` must be `v8`/`jsc`/`quickjs`, `timeout` must be a positive number, `policy` must be a recognized tier.
+3. **Queue** — The execution is enqueued with priority-based concurrency control. A `settled` flag prevents the timeout handler and task completion from racing to double-resolve the promise.
+4. **Policy Engine** — The code is scanned against 11 regex-based threat categories. Each match produces a finding with severity (`critical`/`high`/`medium`/`low`) and a cumulative risk score. If the score exceeds the policy threshold, execution is blocked.
+5. **Executor** — The code is escaped (template injection safe), wrapped in an Edge.js WASM harness, and executed with the selected engine. Results are SHA256-cached for deduplication and stored with LRU eviction (max 1,000 entries).
+6. **Audit** — Execution metadata is persisted asynchronously as JSONL (daily rotation) and per-execution JSON files. The in-memory audit map is capped at 10,000 entries with FIFO eviction.
+7. **Response** — Result is returned as JSON, or streamed via SSE for real-time output.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Edge.js](https://edge.codes) runtime (provides WASM sandboxing)
+- Node.js ≥ 18 (for standard library APIs)
+
+### Installation
 
 ```bash
-# Clone and install
 git clone https://github.com/amafjarkasi/sandbox-ai-wasm.git
 cd sandbox-ai-wasm
-
-# Start in sandboxed mode (recommended)
-edge --safe server.js
-
-# Or normal mode (no WASM isolation)
-edge server.js
 ```
 
-The server starts on `http://localhost:3000`. Open `/dashboard` for the monitoring UI.
+No `npm install` needed — the project has zero dependencies. Everything is built on Node.js standard library and Edge.js runtime APIs.
 
-### Execute code
+### Running
+
+```bash
+# Sandboxed mode (recommended for production)
+edge --safe server.js
+
+# Normal mode (development, no WASM isolation)
+edge server.js
+
+# Development mode with auto-reload
+edge --run dev server.js
+```
+
+The server starts on `http://localhost:3000`:
+
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:3000/dashboard` | Monitoring dashboard |
+| `http://localhost:3000/security` | Security findings dashboard |
+| `http://localhost:3000/api/stats` | Server statistics |
+
+### Your first execution
 
 ```bash
 curl -X POST http://localhost:3000/api/execute \
@@ -56,57 +105,6 @@ curl -X POST http://localhost:3000/api/execute \
     "policy": "strict"
   }'
 ```
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                      HTTP Server                         │
-│  Rate Limiter → Auth → Input Validation → Router         │
-└──────────────┬───────────────────────────────────────────┘
-               │
-    ┌──────────▼──────────┐
-    │   Execution Queue   │  Priority-based concurrency control
-    │   (settled flags)   │  with race-condition-safe timeouts
-    └──────────┬──────────┘
-               │
-    ┌──────────▼──────────┐
-    │   Policy Engine     │  11-category threat detection
-    │   Risk scoring      │  + policy enforcement
-    └──────────┬──────────┘
-               │
-    ┌──────────▼──────────┐
-    │   Executor          │  Edge.js WASM sandbox
-    │   ┌───┬───┬───┐     │  Multi-engine selection
-    │   │V8 │JSC│QJS│     │  Result caching (SHA256)
-    │   └───┴───┴───┘     │  LRU eviction (1000 entries)
-    └──────────┬──────────┘
-               │
-    ┌──────────▼──────────┐
-    │   Audit Logger      │  Async I/O persistence
-    │   Chain of custody  │  JSONL + per-execution JSON
-    └─────────────────────┘
-```
-
----
-
-## API Reference
-
-### `POST /api/execute`
-
-Execute code in a sandbox.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `code` | `string` | *required* | JavaScript source to execute |
-| `engine` | `string` | `"v8"` | Engine: `v8`, `jsc`, `quickjs` |
-| `policy` | `string` | `"standard"` | Policy: `strict`, `standard`, `extended`, `agent` |
-| `timeout` | `number` | policy default | Max execution time (ms) |
-| `memory` | `string` | policy default | Memory limit (e.g. `"64mb"`) |
-| `context` | `object` | `{}` | Variables injected into scope |
-| `language` | `string` | `"javascript"` | Language identifier |
 
 **Response:**
 
@@ -125,131 +123,224 @@ Execute code in a sandbox.
 }
 ```
 
-### `POST /api/execute/stream`
+---
 
-Same parameters as `/api/execute`, returns Server-Sent Events for real-time output.
+## API Reference
 
-### `GET /api/result/:id`
+### Execute Code
 
-Retrieve a cached execution result by ID.
+#### `POST /api/execute`
 
-### `GET /api/stats`
+Run JavaScript in a sandboxed environment.
 
-Server statistics: execution counts, engine usage, average duration.
+**Request body:**
 
-### `GET /api/engines`
+| Field | Type | Default | Required | Description |
+|-------|------|---------|----------|-------------|
+| `code` | `string` | — | ✅ | JavaScript source code to execute |
+| `engine` | `string` | `"v8"` | — | Execution engine: `v8`, `jsc`, `quickjs` |
+| `policy` | `string` | `"standard"` | — | Security policy tier (see [Security Policies](#security-policies)) |
+| `timeout` | `number` | per-policy | — | Max execution time in milliseconds |
+| `memory` | `string` | per-policy | — | Memory limit (e.g. `"64mb"`, `"128mb"`) |
+| `context` | `object` | `{}` | — | Variables injected into the execution scope |
+| `language` | `string` | `"javascript"` | — | Language identifier for audit logging |
 
-List available engines and their status.
+**Response fields:**
 
-### `GET /api/audit/security-summary`
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique execution ID (`exec_` prefix) |
+| `status` | `string` | `completed`, `error`, `blocked`, `timeout` |
+| `output` | `string` | Captured `console.log` output |
+| `engine` | `string` | Engine that ran the code |
+| `durationMs` | `number` | Wall-clock execution time |
+| `dangerAnalysis` | `object` | Threat scan results (score, level, findings) |
+| `error` | `string` | Error message (if `status !== "completed"`) |
+| `violations` | `string[]` | Policy violations (if `status === "blocked"`) |
 
-Security overview: findings by severity/category, recent threats.
+**Error responses:**
 
-### `GET /dashboard`
+| Status | Reason |
+|--------|--------|
+| `400` | Missing `code`, invalid `engine`, invalid `timeout`, or invalid `policy` |
+| `401` | Missing or invalid `API_KEY` |
+| `413` | Request body exceeds `MAX_BODY_SIZE` |
+| `429` | Rate limit exceeded |
 
-Interactive monitoring dashboard.
+#### `POST /api/execute/stream`
 
-### `GET /security`
+Same parameters as `/api/execute`. Returns a `text/event-stream` (SSE) response:
 
-Security findings dashboard with real-time updates.
+```
+event: chunk
+data: {"chunk": "Processing...\n", "index": 0}
+
+event: complete
+data: {"id": "exec_abc123", "status": "completed", "durationMs": 45}
+```
+
+### Results & Stats
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/result/:id` | Retrieve cached execution result by ID |
+| `GET` | `/api/stats` | Execution counts, engine usage, avg duration |
+| `GET` | `/api/engines` | Engine availability and usage statistics |
+| `GET` | `/api/audit/security-summary` | Findings by severity/category, recent threats |
+
+### Dashboards
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/dashboard` | Real-time monitoring: executions, performance, engine usage |
+| `GET` | `/security` | Security findings with auto-refresh (5s polling) |
 
 ---
 
-## Security Policies
+## Security Model
 
-| Policy | Timeout | Memory | Network | Filesystem | Use Case |
-|--------|---------|--------|---------|------------|----------|
-| **strict** | 5s | 32 MB | None | None | Untrusted user input |
-| **standard** | 15s | 64 MB | Restricted | Read-only | General workloads |
-| **extended** | 30s | 128 MB | Allowed | Read/Write | Trusted internal code |
-| **agent** | 60s | 256 MB | Allowed | Read/Write | AI agent tool calls |
+### Security Policies
 
-### Threat Detection Categories
+Four built-in policy tiers control what sandboxed code is allowed to do:
 
-SandboxAI scans code for 11 categories of dangerous patterns before execution:
+| Policy | Timeout | Memory | Network | Filesystem | Eval | Modules | Best For |
+|--------|---------|--------|---------|------------|------|---------|----------|
+| **`strict`** | 5s | 32 MB | ❌ None | ❌ None | ❌ | `buffer`, `crypto`, `url`, `util` | Untrusted user input |
+| **`standard`** | 15s | 64 MB | 🔒 Restricted | 📖 Read-only | ❌ | + `path`, `querystring`, `string_decoder` | General workloads |
+| **`extended`** | 30s | 128 MB | ✅ Allowed | 📝 Read/Write | ✅ | + `fs`, `http`, `https`, `stream`, `zlib` | Trusted internal code |
+| **`agent`** | 60s | 256 MB | ✅ Allowed | 📝 Read/Write | ✅ | Full access | AI agent tool calls |
 
-1. Command execution (`exec`, `spawn`, `execSync`)
-2. Code injection (`eval`, `new Function`, `vm.runInContext`)
-3. File system access (`fs.readFile`, `fs.unlink`)
-4. Network requests (`http.request`, `fetch`, `net.Socket`)
-5. Prototype pollution (`__proto__`, `constructor.prototype`)
-6. Module loading (`require`, dynamic `import()`)
-7. Environment access (`process.env`, `process.exit`)
-8. Buffer/memory manipulation
-9. Timer abuse (`setInterval` flooding)
-10. WebAssembly execution
-11. Encoding tricks (hex/unicode obfuscation)
+### Threat Detection
 
-Each finding is scored and aggregated into a risk level: `safe`, `low`, `medium`, `high`, or `critical`.
+Before any code reaches the sandbox, the **Policy Engine** scans it against 11 categories of known dangerous patterns:
+
+| # | Category | Patterns Detected | Severity |
+|---|----------|-------------------|----------|
+| 1 | **Command Execution** | `exec`, `spawn`, `execSync`, `execFile` | 🔴 Critical |
+| 2 | **Code Injection** | `eval()`, `new Function()`, `vm.runInContext` | 🔴 Critical |
+| 3 | **File System Access** | `fs.readFile`, `fs.writeFile`, `fs.unlink`, `fs.rmdir` | 🟠 High |
+| 4 | **Network Requests** | `http.request`, `fetch`, `net.Socket`, `dgram` | 🟠 High |
+| 5 | **Prototype Pollution** | `__proto__`, `constructor.prototype`, `Object.setPrototypeOf` | 🟠 High |
+| 6 | **Module Loading** | `require()`, dynamic `import()`, `module.exports` | 🟡 Medium |
+| 7 | **Environment Access** | `process.env`, `process.exit`, `process.kill` | 🟡 Medium |
+| 8 | **Buffer Manipulation** | `Buffer.alloc`, `SharedArrayBuffer`, `ArrayBuffer` | 🟡 Medium |
+| 9 | **Timer Abuse** | `setInterval` flooding, recursive `setTimeout` | 🟢 Low |
+| 10 | **WebAssembly** | `WebAssembly.compile`, `WebAssembly.instantiate` | 🟡 Medium |
+| 11 | **Encoding Tricks** | Hex sequences (`\x`), unicode escapes (`\u`), `atob`/`btoa` | 🟢 Low |
+
+Each finding carries a weighted score. The aggregate determines the risk level:
+
+| Risk Level | Score Range | Action |
+|------------|-------------|--------|
+| `safe` | 0 | Proceed |
+| `low` | 1–3 | Proceed with logging |
+| `medium` | 4–6 | Proceed with warning |
+| `high` | 7–9 | Block under `strict` policy |
+| `critical` | 10+ | Block under all policies |
+
+### Audit Logging
+
+Every execution produces an audit record containing:
+
+- Execution ID, timestamp, and duration
+- Input code hash (SHA256)
+- Policy applied and engine used
+- Danger analysis results and risk score
+- Output length and error details
+- Full chain of custody (start → policy check → execution → completion)
+
+Logs are persisted asynchronously to `logs/`:
+- **Daily log**: `audit-YYYY-MM-DD.jsonl` — append-only, one JSON object per line
+- **Per-execution**: `execution-{id}.json` — detailed record with full audit trail
 
 ---
 
 ## Configuration
 
-All configuration is via environment variables:
+All configuration is through environment variables — no config files needed:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3000` | Server port |
+| `PORT` | `3000` | Server listen port |
 | `HOST` | `0.0.0.0` | Bind address |
-| `API_KEY` | *(none)* | Optional authentication key |
-| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
-| `MAX_BODY_SIZE` | `1048576` | Max request body in bytes (1 MB) |
-| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window (ms) |
-| `RATE_LIMIT_MAX_REQUESTS` | `30` | Max requests per window |
-| `EDGE_SAFE_MODE` | *(none)* | Set by `edge --safe` to enable WASM |
+| `API_KEY` | *(disabled)* | Set to require `Authorization: Bearer <key>` on all API calls |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins (e.g. `https://app.example.com,https://admin.example.com`) |
+| `MAX_BODY_SIZE` | `1048576` | Maximum request body size in bytes (default: 1 MB) |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limiting window in milliseconds |
+| `RATE_LIMIT_MAX_REQUESTS` | `30` | Maximum requests per client per window |
+| `EDGE_SAFE_MODE` | *(auto)* | Set automatically by `edge --safe` to enable WASM isolation |
+
+**Production example:**
+
+```bash
+API_KEY=sk-your-secret-key \
+CORS_ORIGINS=https://app.example.com \
+RATE_LIMIT_MAX_REQUESTS=100 \
+MAX_BODY_SIZE=524288 \
+edge --safe server.js
+```
 
 ---
 
 ## MCP Agent Interface
 
-SandboxAI exposes an [MCP](https://modelcontextprotocol.io)-compatible tool interface for AI agents:
+SandboxAI implements the [Model Context Protocol](https://modelcontextprotocol.io) for seamless AI agent integration. The agent server advertises an `execute_code` tool that any MCP-compatible client can discover and call:
 
 ```json
 {
   "tool": "execute_code",
   "arguments": {
-    "code": "console.log(Array.from({length: 5}, (_, i) => i * i))",
+    "code": "const primes = n => { const s = []; for (let i = 2; i < n; i++) { if (s.every(p => i % p)) s.push(i); } return s; }; console.log(primes(50));",
     "engine": "v8",
     "policy": "agent"
   }
 }
 ```
 
-The agent server handles tool discovery, execution, and structured result formatting. See [`lib/agent.js`](lib/agent.js) for the full interface.
+The agent interface returns structured results with execution status, output, duration, and risk analysis — ready for LLM consumption without additional parsing.
+
+See [`lib/agent.js`](lib/agent.js) for the full tool schema and handler implementation.
 
 ---
 
 ## Examples
 
-Run any example while the server is running:
+Start the server, then run any example:
 
 ```bash
-node examples/quick-run.js
+edge --safe server.js      # Terminal 1
+node examples/quick-run.js  # Terminal 2
 ```
 
-| Example | Description |
-|---------|-------------|
-| `quick-run.js` | Minimal execution demo |
-| `ai-agent.js` | MCP tool integration |
-| `data-pipeline.js` | SSE streaming pipeline |
-| `moderate-data-processing.js` | CSV parsing & statistics |
-| `moderate-api-mocking.js` | Mock API with test suite |
-| `advanced-ai-agent.js` | NLP intent parsing with memory |
-| `advanced-workflow-engine.js` | DAG-based workflow execution |
-| `complex-parallel-execution.js` | Worker pools & MapReduce |
-| `complex-streaming-pipeline.js` | Backpressure & windowing |
-| `dangerous-scripts.js` | Threat detection showcase |
-| `realworld-code-review-bot.js` | Automated PR security scanning |
-| `realworld-data-transformer.js` | CSV/JSON transformation |
-| `realworld-calculator-api.js` | Safe math expression eval |
-| `realworld-webhook-handler.js` | Webhook processing |
-| `realworld-template-engine.js` | XSS-safe template rendering |
-| `realworld-api-tester.js` | Integration test runner |
-| `realworld-format-converter.js` | JSON/YAML/CSV conversion |
-| `realworld-chatbot-tool.js` | LLM tool execution |
-| `realworld-scheduled-task.js` | Cron-style job runner |
-| `realworld-code-runner.js` | Educational code judge |
+### By Difficulty
+
+| Level | Example | What It Demonstrates |
+|-------|---------|---------------------|
+| 🟢 Basic | [`quick-run.js`](examples/quick-run.js) | Minimal execution via HTTP API |
+| 🟢 Basic | [`ai-agent.js`](examples/ai-agent.js) | MCP tool discovery and execution |
+| 🟢 Basic | [`data-pipeline.js`](examples/data-pipeline.js) | SSE streaming for real-time output |
+| 🟡 Moderate | [`moderate-data-processing.js`](examples/moderate-data-processing.js) | CSV parsing, statistics, correlation analysis |
+| 🟡 Moderate | [`moderate-api-mocking.js`](examples/moderate-api-mocking.js) | Mock REST API with CRUD + automated test suite |
+| 🔵 Advanced | [`advanced-ai-agent.js`](examples/advanced-ai-agent.js) | NLP intent parsing, tool registry, conversation memory |
+| 🔵 Advanced | [`advanced-workflow-engine.js`](examples/advanced-workflow-engine.js) | DAG-based workflows with topological sorting |
+| 🟣 Complex | [`complex-parallel-execution.js`](examples/complex-parallel-execution.js) | Worker pools, batch processing, MapReduce |
+| 🟣 Complex | [`complex-streaming-pipeline.js`](examples/complex-streaming-pipeline.js) | Backpressure, tumbling/sliding/session windows |
+| 🔴 Security | [`dangerous-scripts.js`](examples/dangerous-scripts.js) | 11-category threat detection showcase |
+
+### Real-World Use Cases
+
+| Example | Use Case | Key Pattern |
+|---------|----------|-------------|
+| [`realworld-code-review-bot.js`](examples/realworld-code-review-bot.js) | CI/CD security scanning | Automated PR analysis |
+| [`realworld-data-transformer.js`](examples/realworld-data-transformer.js) | ETL pipelines | CSV/JSON transformation |
+| [`realworld-calculator-api.js`](examples/realworld-calculator-api.js) | Calculator services | Safe math expression eval |
+| [`realworld-webhook-handler.js`](examples/realworld-webhook-handler.js) | Payment processing | Webhook validation + execution |
+| [`realworld-template-engine.js`](examples/realworld-template-engine.js) | Email generation | XSS-safe template rendering |
+| [`realworld-api-tester.js`](examples/realworld-api-tester.js) | Integration testing | Third-party API validation |
+| [`realworld-format-converter.js`](examples/realworld-format-converter.js) | Data migration | JSON ↔ YAML ↔ CSV conversion |
+| [`realworld-chatbot-tool.js`](examples/realworld-chatbot-tool.js) | LLM applications | Tool-calling execution loop |
+| [`realworld-scheduled-task.js`](examples/realworld-scheduled-task.js) | Background jobs | Cron-style task runner |
+| [`realworld-code-runner.js`](examples/realworld-code-runner.js) | Online judges | Educational code evaluation |
 
 ---
 
@@ -257,25 +348,39 @@ node examples/quick-run.js
 
 ```
 sandbox-ai-wasm/
-├── server.js              # HTTP server, routing, middleware
+├── server.js                  # HTTP server, routing, middleware, dashboards
 ├── sandbox/
-│   ├── executor.js        # Core execution engine (Edge.js WASM)
-│   └── policy.js          # Security policy engine & threat detection
+│   ├── executor.js            # Core execution engine (Edge.js WASM harness)
+│   └── policy.js              # Security policy engine & threat detection
 ├── lib/
-│   ├── queue.js           # Priority execution queue
-│   ├── agent.js           # MCP agent tool interface
-│   ├── audit.js           # Audit logging (async JSONL persistence)
-│   ├── streaming.js       # SSE stream manager
-│   ├── engines.js         # Multi-engine manager
-│   ├── dashboard.js       # Dashboard utilities
-│   └── reporting.js       # Report generation
-├── examples/              # 20 runnable examples
-├── logs/                  # Runtime audit logs (gitignored)
-└── public/                # Static assets
+│   ├── queue.js               # Priority execution queue (race-safe)
+│   ├── agent.js               # MCP agent tool interface
+│   ├── audit.js               # Audit logging (async JSONL + per-exec JSON)
+│   ├── streaming.js           # SSE stream manager with backpressure
+│   ├── engines.js             # Multi-engine manager (V8, JSC, QuickJS)
+│   ├── dashboard.js           # Dashboard rendering utilities
+│   └── reporting.js           # Report generation
+├── examples/                  # 20 runnable examples (basic → complex)
+├── public/                    # Static assets (logo, architecture diagram)
+├── logs/                      # Runtime audit logs (gitignored)
+├── .github/workflows/         # CI/CD configuration
+├── CHANGELOG.md               # Version history
+└── package.json               # Zero dependencies
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome. Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feat/your-feature`)
+3. Commit with [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`)
+4. Open a pull request
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — use it however you want.
