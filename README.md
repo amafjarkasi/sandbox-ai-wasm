@@ -71,7 +71,7 @@ git clone https://github.com/amafjarkasi/sandbox-ai-wasm.git
 cd sandbox-ai-wasm
 ```
 
-No `npm install` needed — the project has zero dependencies. Everything is built on Node.js standard library and Edge.js runtime APIs.
+Run `npm install` to install the `acorn` AST parser dependencies, then you are ready to go.
 
 ### Running
 
@@ -399,7 +399,7 @@ sandbox-ai-wasm/
 ├── logs/                      # Runtime audit logs (gitignored)
 ├── .github/workflows/         # CI/CD configuration
 ├── CHANGELOG.md               # Version history
-└── package.json               # Zero dependencies
+└── package.json               # Project metadata and dependencies
 ```
 
 ---
