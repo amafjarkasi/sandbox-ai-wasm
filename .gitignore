@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json  # no deps currently; ignore to reduce noise
 yarn.lock
 
 # Runtime data
