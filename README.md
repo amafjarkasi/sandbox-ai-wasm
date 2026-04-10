@@ -1,256 +1,281 @@
-# SandboxAI Examples
+<div align="center">
 
-A collection of examples demonstrating SandboxAI capabilities from basic to advanced.
+# 🔒 SandboxAI
+
+**Secure AI Code Execution Platform — powered by Edge.js WASM Sandboxing**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Edge.js](https://img.shields.io/badge/runtime-Edge.js-7c3aed)](https://edge.codes)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
+
+Execute untrusted JavaScript safely in isolated WASM sandboxes with
+multi-engine support, real-time streaming, security policy enforcement,
+and a built-in AI agent interface.
+
+</div>
+
+---
+
+## Why SandboxAI?
+
+Running untrusted code is dangerous. SandboxAI wraps execution in Edge.js WASM containers, giving you:
+
+- **Hard isolation** — code runs in a WASM sandbox, not on your host OS
+- **Policy enforcement** — control network, filesystem, memory, and module access per-execution
+- **Threat detection** — 11 categories of dangerous patterns analyzed before execution
+- **Audit trail** — every execution is logged with full chain of custody
+
+Perfect for AI agent tool-use, online code judges, webhook processors, and any workflow where you need to run code you don't trust.
+
+---
 
 ## Quick Start
 
 ```bash
-# Start the server
-node server.js
+# Clone and install
+git clone https://github.com/amafjarkasi/sandbox-ai-wasm.git
+cd sandbox-ai-wasm
 
-# Run any example
-node examples/quick-run.js
-node examples/moderate-data-processing.js
-node examples/advanced-ai-agent.js
+# Start in sandboxed mode (recommended)
+edge --safe server.js
+
+# Or normal mode (no WASM isolation)
+edge server.js
 ```
 
-## Example Categories
+The server starts on `http://localhost:3000`. Open `/dashboard` for the monitoring UI.
 
-### Basic Examples
+### Execute code
 
-| Example | Description | Concepts |
-|---------|-------------|----------|
-| `quick-run.js` | Simple code execution | Basic API usage |
-| `ai-agent.js` | MCP tool integration | Agent interface |
-| `data-pipeline.js` | SSE streaming | Real-time output |
+```bash
+curl -X POST http://localhost:3000/api/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "const fib = n => n <= 1 ? n : fib(n-1) + fib(n-2); console.log(fib(10));",
+    "engine": "v8",
+    "policy": "strict"
+  }'
+```
 
-### Moderate Examples
+---
 
-| Example | Description | Concepts |
-|---------|-------------|----------|
-| `moderate-data-processing.js` | CSV parsing & analysis | Data transformation, aggregation |
-| `moderate-api-mocking.js` | Mock API server & tests | Async operations, test patterns |
+## Architecture
 
-**Features demonstrated:**
-- CSV parsing and statistical analysis
-- Data transformation pipelines
-- Mock API with CRUD operations
-- Automated test suites
-- Correlation analysis
+```
+┌──────────────────────────────────────────────────────────┐
+│                      HTTP Server                         │
+│  Rate Limiter → Auth → Input Validation → Router         │
+└──────────────┬───────────────────────────────────────────┘
+               │
+    ┌──────────▼──────────┐
+    │   Execution Queue   │  Priority-based concurrency control
+    │   (settled flags)   │  with race-condition-safe timeouts
+    └──────────┬──────────┘
+               │
+    ┌──────────▼──────────┐
+    │   Policy Engine     │  11-category threat detection
+    │   Risk scoring      │  + policy enforcement
+    └──────────┬──────────┘
+               │
+    ┌──────────▼──────────┐
+    │   Executor          │  Edge.js WASM sandbox
+    │   ┌───┬───┬───┐     │  Multi-engine selection
+    │   │V8 │JSC│QJS│     │  Result caching (SHA256)
+    │   └───┴───┴───┘     │  LRU eviction (1000 entries)
+    └──────────┬──────────┘
+               │
+    ┌──────────▼──────────┐
+    │   Audit Logger      │  Async I/O persistence
+    │   Chain of custody  │  JSONL + per-execution JSON
+    └─────────────────────┘
+```
 
-### Advanced Examples
+---
 
-| Example | Description | Concepts |
-|---------|-------------|----------|
-| `advanced-ai-agent.js` | AI agent with tool use | Intent parsing, memory, state |
-| `advanced-workflow-engine.js` | Multi-step workflows | Dependency graphs, DAG execution |
+## API Reference
 
-**Features demonstrated:**
-- Natural language intent parsing
-- Tool registry pattern
-- Conversation history
-- Workflow definition DSL
-- Topological sorting
-- Conditional execution
-- Error handling strategies
+### `POST /api/execute`
 
-### Complex Examples
+Execute code in a sandbox.
 
-| Example | Description | Concepts |
-|---------|-------------|----------|
-| `complex-parallel-execution.js` | Worker pools & batching | Concurrency, MapReduce |
-| `complex-streaming-pipeline.js` | Real-time stream processing | Backpressure, windowing |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `code` | `string` | *required* | JavaScript source to execute |
+| `engine` | `string` | `"v8"` | Engine: `v8`, `jsc`, `quickjs` |
+| `policy` | `string` | `"standard"` | Policy: `strict`, `standard`, `extended`, `agent` |
+| `timeout` | `number` | policy default | Max execution time (ms) |
+| `memory` | `string` | policy default | Memory limit (e.g. `"64mb"`) |
+| `context` | `object` | `{}` | Variables injected into scope |
+| `language` | `string` | `"javascript"` | Language identifier |
 
-**Features demonstrated:**
-- Worker pool pattern
-- Batch processing with retry
-- MapReduce implementation
-- Stream processing with backpressure
-- Tumbling/sliding/session windows
-- Real-time aggregation
-- Pipeline composition
+**Response:**
 
-### Security Examples
+```json
+{
+  "id": "exec_a1b2c3d4e5f6",
+  "status": "completed",
+  "output": "55\n",
+  "engine": "v8",
+  "durationMs": 12,
+  "dangerAnalysis": {
+    "score": 0,
+    "level": "safe",
+    "findings": []
+  }
+}
+```
 
-| Example | Description | Concepts |
-|---------|-------------|----------|
-| `dangerous-scripts.js` | Attack vector detection | Security analysis, auditing |
+### `POST /api/execute/stream`
 
-**Features demonstrated:**
-- 11 categories of threat detection
-- Risk scoring
-- Policy enforcement
-- Audit trail generation
+Same parameters as `/api/execute`, returns Server-Sent Events for real-time output.
 
-### Real-World Examples
+### `GET /api/result/:id`
 
-| Example | Description | Use Case |
-|---------|-------------|----------|
-| `realworld-code-review-bot.js` | Automated PR security scanning | CI/CD pipelines |
-| `realworld-data-transformer.js` | CSV/JSON transformation | Data pipelines |
-| `realworld-calculator-api.js` | Safe math expression evaluation | Calculator services |
-| `realworld-webhook-handler.js` | Process webhooks securely | Payment processing |
-| `realworld-template-engine.js` | Render templates with XSS protection | Email generation |
-| `realworld-api-tester.js` | Test third-party APIs | Integration testing |
-| `realworld-format-converter.js` | Convert JSON/YAML/CSV | Data migration |
-| `realworld-chatbot-tool.js` | AI agent tool execution | LLM applications |
-| `realworld-scheduled-task.js` | Cron job logic execution | Background jobs |
-| `realworld-code-runner.js` | Educational coding platform | Online judges |
+Retrieve a cached execution result by ID.
 
-**Features demonstrated:**
-- Code review automation
-- Data transformation pipelines
-- Safe expression evaluation
-- Webhook processing with validation
-- Template rendering with XSS protection
-- API integration testing
-- Format conversion (JSON/YAML/CSV)
-- AI chatbot tool calling
-- Scheduled task execution
-- Educational code evaluation
+### `GET /api/stats`
 
-## Running Examples
+Server statistics: execution counts, engine usage, average duration.
 
-### Basic Usage
+### `GET /api/engines`
+
+List available engines and their status.
+
+### `GET /api/audit/security-summary`
+
+Security overview: findings by severity/category, recent threats.
+
+### `GET /dashboard`
+
+Interactive monitoring dashboard.
+
+### `GET /security`
+
+Security findings dashboard with real-time updates.
+
+---
+
+## Security Policies
+
+| Policy | Timeout | Memory | Network | Filesystem | Use Case |
+|--------|---------|--------|---------|------------|----------|
+| **strict** | 5s | 32 MB | None | None | Untrusted user input |
+| **standard** | 15s | 64 MB | Restricted | Read-only | General workloads |
+| **extended** | 30s | 128 MB | Allowed | Read/Write | Trusted internal code |
+| **agent** | 60s | 256 MB | Allowed | Read/Write | AI agent tool calls |
+
+### Threat Detection Categories
+
+SandboxAI scans code for 11 categories of dangerous patterns before execution:
+
+1. Command execution (`exec`, `spawn`, `execSync`)
+2. Code injection (`eval`, `new Function`, `vm.runInContext`)
+3. File system access (`fs.readFile`, `fs.unlink`)
+4. Network requests (`http.request`, `fetch`, `net.Socket`)
+5. Prototype pollution (`__proto__`, `constructor.prototype`)
+6. Module loading (`require`, dynamic `import()`)
+7. Environment access (`process.env`, `process.exit`)
+8. Buffer/memory manipulation
+9. Timer abuse (`setInterval` flooding)
+10. WebAssembly execution
+11. Encoding tricks (hex/unicode obfuscation)
+
+Each finding is scored and aggregated into a risk level: `safe`, `low`, `medium`, `high`, or `critical`.
+
+---
+
+## Configuration
+
+All configuration is via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Server port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `API_KEY` | *(none)* | Optional authentication key |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
+| `MAX_BODY_SIZE` | `1048576` | Max request body in bytes (1 MB) |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window (ms) |
+| `RATE_LIMIT_MAX_REQUESTS` | `30` | Max requests per window |
+| `EDGE_SAFE_MODE` | *(none)* | Set by `edge --safe` to enable WASM |
+
+---
+
+## MCP Agent Interface
+
+SandboxAI exposes an [MCP](https://modelcontextprotocol.io)-compatible tool interface for AI agents:
+
+```json
+{
+  "tool": "execute_code",
+  "arguments": {
+    "code": "console.log(Array.from({length: 5}, (_, i) => i * i))",
+    "engine": "v8",
+    "policy": "agent"
+  }
+}
+```
+
+The agent server handles tool discovery, execution, and structured result formatting. See [`lib/agent.js`](lib/agent.js) for the full interface.
+
+---
+
+## Examples
+
+Run any example while the server is running:
 
 ```bash
 node examples/quick-run.js
 ```
 
-### With Different Engines
+| Example | Description |
+|---------|-------------|
+| `quick-run.js` | Minimal execution demo |
+| `ai-agent.js` | MCP tool integration |
+| `data-pipeline.js` | SSE streaming pipeline |
+| `moderate-data-processing.js` | CSV parsing & statistics |
+| `moderate-api-mocking.js` | Mock API with test suite |
+| `advanced-ai-agent.js` | NLP intent parsing with memory |
+| `advanced-workflow-engine.js` | DAG-based workflow execution |
+| `complex-parallel-execution.js` | Worker pools & MapReduce |
+| `complex-streaming-pipeline.js` | Backpressure & windowing |
+| `dangerous-scripts.js` | Threat detection showcase |
+| `realworld-code-review-bot.js` | Automated PR security scanning |
+| `realworld-data-transformer.js` | CSV/JSON transformation |
+| `realworld-calculator-api.js` | Safe math expression eval |
+| `realworld-webhook-handler.js` | Webhook processing |
+| `realworld-template-engine.js` | XSS-safe template rendering |
+| `realworld-api-tester.js` | Integration test runner |
+| `realworld-format-converter.js` | JSON/YAML/CSV conversion |
+| `realworld-chatbot-tool.js` | LLM tool execution |
+| `realworld-scheduled-task.js` | Cron-style job runner |
+| `realworld-code-runner.js` | Educational code judge |
 
-```javascript
-// In any example, change the engine:
-{
-  code: yourCode,
-  engine: "v8",      // Default, fastest
-  engine: "jsc",     // JavaScriptCore
-  engine: "quickjs"  // Lightweight
-}
+---
+
+## Project Structure
+
+```
+sandbox-ai-wasm/
+├── server.js              # HTTP server, routing, middleware
+├── sandbox/
+│   ├── executor.js        # Core execution engine (Edge.js WASM)
+│   └── policy.js          # Security policy engine & threat detection
+├── lib/
+│   ├── queue.js           # Priority execution queue
+│   ├── agent.js           # MCP agent tool interface
+│   ├── audit.js           # Audit logging (async JSONL persistence)
+│   ├── streaming.js       # SSE stream manager
+│   ├── engines.js         # Multi-engine manager
+│   ├── dashboard.js       # Dashboard utilities
+│   └── reporting.js       # Report generation
+├── examples/              # 20 runnable examples
+├── logs/                  # Runtime audit logs (gitignored)
+└── public/                # Static assets
 ```
 
-### With Different Policies
+---
 
-```javascript
-// Strict - most secure
-{ policy: "strict" }
+## License
 
-// Standard - balanced
-{ policy: "standard" }
-
-// Extended - more permissions
-{ policy: "extended" }
-
-// Agent - for AI workloads
-{ policy: "agent" }
-```
-
-## Example Output
-
-### Data Processing Example
-```
-=== Department Statistics ===
-{
-  "Engineering": { "count": 5, "avgSalary": 98400, "avgAge": 36 },
-  "Marketing": { "count": 3, "avgSalary": 74666, "avgAge": 30 },
-  "Sales": { "count": 2, "avgSalary": 91500, "avgAge": 38 }
-}
-
-=== Salary Percentiles ===
-{ "p50": 85000, "p75": 95000, "p90": 110000 }
-
-=== Age-Salary Correlation ===
-{ "correlation": "0.4523", "interpretation": "Positive" }
-```
-
-### AI Agent Example
-```
-User: "add 15 27"
-Agent: I calculated add of 15 and 27, which equals 42
-
-User: "search for javascript"
-Agent: I found 1 result(s) for "javascript"
-
-User: "remember userName is Alice"
-Agent: I remembered that userName is Alice
-```
-
-### Workflow Engine Example
-```
-Execution ID: exec_1234567890
-Status: completed
-Duration: 156 ms
-
-Step Results:
-  extract: completed {"data": "Fetched data..."}
-  validate: completed {"valid": true}
-  transform: completed {"transformed": true}
-  enrich: completed {"result": 600}
-  notify_success: completed {"sent": true}
-```
-
-### Parallel Execution Example
-```
-Processing 12 tasks, batch size 4
-Processing batch 1/3...
-Processing batch 2/3...
-Processing batch 3/3...
-
-=== Results ===
-Duration: 245 ms
-Summary: {
-  "total": 12,
-  "successful": 12,
-  "failed": 0,
-  "successRate": "100.00%"
-}
-```
-
-## Creating Custom Examples
-
-Template for new examples:
-
-```javascript
-const http = require("node:http");
-
-const myCode = `
-// Your code here
-console.log("Hello from sandbox!");
-`;
-
-async function runExample() {
-  return new Promise((resolve, reject) => {
-    const req = http.request({
-      hostname: "localhost",
-      port: 3000,
-      path: "/api/execute",
-      method: "POST",
-      headers: { "Content-Type": "application/json" }
-    }, (res) => {
-      let data = "";
-      res.on("data", chunk => data += chunk);
-      res.on("end", () => resolve(JSON.parse(data)));
-    });
-
-    req.on("error", reject);
-    req.write(JSON.stringify({
-      code: myCode,
-      engine: "v8",
-      policy: "standard"
-    }));
-    req.end();
-  });
-}
-
-http.get("http://localhost:3000/api/stats", () => {
-  runExample().catch(console.error);
-});
-```
-
-## Tips
-
-1. **Use appropriate policies** - Strict for untrusted code, Agent for AI workloads
-2. **Set timeouts** - Long-running examples need higher timeout values
-3. **Check risk scores** - Examples show how to access danger analysis
-4. **Stream for real-time** - Use `/api/execute/stream` for live output
-5. **Audit everything** - All executions are logged for security review
+[MIT](LICENSE)
