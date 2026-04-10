@@ -567,8 +567,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // Dashboard
     if (path === "/" || path === "/dashboard") {
+      console.log(`[DEBUG] Serving Nebula Dashboard for request: ${requestId}`);
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(dashboard.render());
       return;
@@ -654,254 +654,446 @@ const server = http.createServer(async (req, res) => {
 
 function renderSecurityDashboard() {
   return `<!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SandboxAI Security Dashboard</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f0f23;
-      color: #e0e0e0;
-      line-height: 1.6;
-    }
-    .header {
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      padding: 2rem;
-      border-bottom: 1px solid #2d2d44;
-    }
-    .header h1 {
-      font-size: 2rem;
-      background: linear-gradient(90deg, #ff4444, #ffaa00);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 0.5rem;
-    }
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 2rem;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-    .card {
-      background: #1a1a2e;
-      border-radius: 12px;
-      padding: 1.5rem;
-      border: 1px solid #2d2d44;
-    }
-    .card h3 {
-      color: #888;
-      font-size: 0.875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 1rem;
-    }
-    .stat-value {
-      font-size: 2.5rem;
-      font-weight: 700;
-    }
-    .stat-value.critical { color: #ff4444; }
-    .stat-value.high { color: #ffaa00; }
-    .stat-value.medium { color: #ffdd00; }
-    .stat-value.low { color: #00d4ff; }
-    .stat-value.safe { color: #00ff88; }
-    .finding {
-      background: #0f0f23;
-      border-radius: 8px;
-      padding: 1rem;
-      margin-bottom: 0.75rem;
-      border-left: 3px solid;
-    }
-    .finding.critical { border-left-color: #ff4444; }
-    .finding.high { border-left-color: #ffaa00; }
-    .finding.medium { border-left-color: #ffdd00; }
-    .finding.low { border-left-color: #00d4ff; }
-    .finding-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.5rem;
-    }
-    .finding-category {
-      font-weight: 600;
-      color: #fff;
-    }
-    .badge {
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-    .badge-critical { background: #ff444422; color: #ff4444; }
-    .badge-high { background: #ffaa0022; color: #ffaa00; }
-    .badge-medium { background: #ffdd0022; color: #ffdd00; }
-    .badge-low { background: #00d4ff22; color: #00d4ff; }
-    .finding-desc {
-      color: #888;
-      font-size: 0.875rem;
-    }
-    .refresh-btn {
-      background: linear-gradient(135deg, #00d4ff, #7b2cbf);
-      border: none;
-      color: #fff;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    .refresh-btn:hover { opacity: 0.9; }
-    .nav {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-    .nav a {
-      color: #888;
-      text-decoration: none;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-    }
-    .nav a:hover, .nav a.active {
-      background: #2d2d44;
-      color: #fff;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Security Dashboard</h1>
-    <p>Real-time security monitoring and threat detection</p>
-  </div>
-
-  <div class="container">
-    <div class="nav">
-      <a href="/dashboard">Main Dashboard</a>
-      <a href="/security" class="active">Security</a>
-    </div>
-
-    <div class="grid" id="summaryStats">
-      <div class="card">
-        <h3>Total Executions</h3>
-        <div class="stat-value safe" id="totalExecs">-</div>
-      </div>
-      <div class="card">
-        <h3>Dangerous Detected</h3>
-        <div class="stat-value critical" id="dangerousCount">-</div>
-      </div>
-      <div class="card">
-        <h3>Blocked</h3>
-        <div class="stat-value high" id="blockedCount">-</div>
-      </div>
-      <div class="card">
-        <h3>Critical Findings</h3>
-        <div class="stat-value critical" id="criticalCount">-</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h3 style="color:#fff;">Recent Security Findings</h3>
-        <button class="refresh-btn" onclick="loadData()">Refresh</button>
-      </div>
-      <div id="findingsList">
-        <p style="color:#666;">Loading...</p>
-      </div>
-    </div>
-
-    <div class="grid" style="margin-top:2rem;">
-      <div class="card">
-        <h3>Findings by Severity</h3>
-        <div id="severityBreakdown"></div>
-      </div>
-      <div class="card">
-        <h3>Findings by Category</h3>
-        <div id="categoryBreakdown"></div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    function escapeHtml(str) {
-      if (str == null) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    async function loadData() {
-      try {
-        const res = await fetch('/api/audit/security-summary');
-        const data = await res.json();
-
-        document.getElementById('totalExecs').textContent = data.totalExecutions || 0;
-        document.getElementById('dangerousCount').textContent = data.dangerousExecutions || 0;
-        document.getElementById('blockedCount').textContent = data.blockedExecutions || 0;
-        document.getElementById('criticalCount').textContent = data.findingsBySeverity?.critical || 0;
-
-        // Render findings
-        const findingsList = document.getElementById('findingsList');
-        if (data.recentFindings && data.recentFindings.length > 0) {
-          findingsList.innerHTML = data.recentFindings.map(f => \`
-            <div class="finding \${escapeHtml(f.severity)}">
-              <div class="finding-header">
-                <span class="finding-category">\${escapeHtml(f.category)}</span>
-                <span class="badge badge-\${escapeHtml(f.severity)}">\${escapeHtml(f.severity)}</span>
-              </div>
-              <div class="finding-desc">\${escapeHtml(f.description)}</div>
-              <div style="color:#666;font-size:0.75rem;margin-top:0.5rem;">
-                \${new Date(f.timestamp).toLocaleString()} | \${escapeHtml(f.executionId?.substring(0, 16))}...
-              </div>
-            </div>
-          \`).join('');
-        } else {
-          findingsList.innerHTML = '<p style="color:#666;">No security findings yet.</p>';
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>OBSIDIAN VAULT | Security Intelligence</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        vault: {
+                            black: "#020202",
+                            charcoal: "#0a0a0b",
+                            slate: "#161618",
+                            grey: "#2c2c2e",
+                            accent: "#ff9d00", // Tactical Amber
+                            cyan: "#00f2ff",
+                            danger: "#ff3b30",
+                            success: "#34c759"
+                        }
+                    },
+                    fontFamily: {
+                        headline: ["Space Grotesk", "sans-serif"],
+                        mono: ["JetBrains Mono", "monospace"]
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'scan': 'scan 3s linear infinite',
+                        'flicker': 'flicker 0.1s infinite',
+                        'data-stream': 'data-stream 20s linear infinite'
+                    },
+                    keyframes: {
+                        scan: {
+                            '0%': { transform: 'translateY(-100%)' },
+                            '100%': { transform: 'translateY(1000%)' }
+                        },
+                        flicker: {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { opacity: 0.8 }
+                        },
+                        'data-stream': {
+                            '0%': { transform: 'translateY(0)' },
+                            '100%': { transform: 'translateY(-50%)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @layer base {
+            body { @apply bg-vault-black text-gray-400 font-mono; }
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+        }
+        .vault-border { border: 1px solid rgba(255, 157, 0, 0.1); }
+        .vault-border-glow { border: 1px solid rgba(255, 157, 0, 0.3); box-shadow: 0 0 15px rgba(255, 157, 0, 0.1); }
+        .vault-panel { @apply bg-vault-charcoal/80 backdrop-blur-md border border-white/5; }
+        .vault-gradient { background: linear-gradient(135deg, rgba(255, 157, 0, 0.05) 0%, rgba(0, 0, 0, 0) 100%); }
+        
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(to bottom, transparent, rgba(255, 157, 0, 0.2), transparent);
+            pointer-events: none;
+            z-index: 50;
+            animation: scan 4s linear infinite;
         }
 
-        // Render breakdowns
-        const sev = data.findingsBySeverity || {};
-        document.getElementById('severityBreakdown').innerHTML = \`
-          <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-            <span>Critical</span><span style="color:#ff4444;font-weight:600;">\${sev.critical || 0}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-            <span>High</span><span style="color:#ffaa00;font-weight:600;">\${sev.high || 0}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-            <span>Medium</span><span style="color:#ffdd00;font-weight:600;">\${sev.medium || 0}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-            <span>Low</span><span style="color:#00d4ff;font-weight:600;">\${sev.low || 0}</span>
-          </div>
-        \`;
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #020202; }
+        ::-webkit-scrollbar-thumb { background: #161618; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #ff9d00; }
 
-        const cat = data.findingsByCategory || {};
-        document.getElementById('categoryBreakdown').innerHTML = Object.entries(cat)
-          .sort((a, b) => b[1] - a[1])
-          .map(([name, count]) => \`
-            <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-              <span>\${escapeHtml(name)}</span><span style="font-weight:600;">\${count}</span>
+        .crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden selection:bg-vault-accent selection:text-black">
+    <div class="scanline"></div>
+    <div class="crt-overlay"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-40 border-b border-white/5 bg-vault-black/50 backdrop-blur-xl">
+        <div class="max-w-[1800px] mx-auto flex items-center justify-between px-6 py-4">
+            <div class="flex items-center gap-6">
+                <div class="flex flex-col">
+                    <h1 class="font-headline text-lg font-bold tracking-[0.3em] text-vault-accent uppercase leading-none">OBSIDIAN VAULT</h1>
+                    <span class="text-[9px] tracking-[0.5em] text-gray-500 uppercase mt-1">Sovereign Intelligence Unit</span>
+                </div>
             </div>
-          \`).join('') || '<p style="color:#666;">No data</p>';
+            
+            <div class="hidden lg:flex items-center gap-8">
+                <div class="flex flex-col items-end mr-4 border-r border-white/10 pr-6">
+                    <span class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">System Status</span>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-vault-success animate-pulse"></span>
+                        <span class="text-[10px] text-vault-success font-bold uppercase tracking-widest">Nominal</span>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <a href="/dashboard" class="px-5 py-2 text-[10px] font-bold tracking-widest text-gray-400 hover:text-white transition-colors border border-transparent hover:border-white/10 uppercase">Monitor</a>
+                    <a href="#" class="px-5 py-2 text-[10px] font-bold tracking-widest text-vault-accent border border-vault-accent/30 bg-vault-accent/5 uppercase">Tactical</a>
+                    <a href="#" class="px-5 py-2 text-[10px] font-bold tracking-widest text-gray-400 hover:text-white transition-colors uppercase">Logs</a>
+                </div>
+            </div>
 
-      } catch (e) {
-        console.error('Failed to load data:', e);
-      }
-    }
+            <div class="flex items-center gap-4">
+                <button onclick="loadData()" class="group relative px-6 py-2 bg-vault-accent text-black text-[10px] font-bold tracking-[0.2em] uppercase overflow-hidden hover:brightness-110 transition-all active:scale-95">
+                    <span class="relative z-10 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">refresh</span>
+                        Rescan Perimeter
+                    </span>
+                    <div class="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
+                </button>
+            </div>
+        </div>
+    </nav>
 
-    loadData();
-    setInterval(loadData, 5000);
-  </script>
+    <main class="pt-28 pb-12 px-6 max-w-[1800px] mx-auto">
+        <!-- Dashboard Grid -->
+        <div class="grid grid-cols-12 gap-6">
+            
+            <!-- Left: Telemetry Summary -->
+            <div class="col-span-12 lg:col-span-3 space-y-6">
+                <!-- Status Card -->
+                <div class="vault-panel p-6 border-l-4 border-l-vault-accent relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                        <span class="material-symbols-outlined text-8xl">radar</span>
+                    </div>
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-start mb-6">
+                            <span class="text-[10px] font-bold tracking-[0.2em] text-gray-500 uppercase">Detection Engine</span>
+                            <span class="text-[10px] font-bold text-vault-accent font-mono">v4.2.0-secure</span>
+                        </div>
+                        <div class="space-y-6">
+                            <div>
+                                <h2 class="text-4xl font-headline font-bold text-white tracking-tighter" id="totalExecs">0</h2>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500 mt-1">Total Scanned Blocks</p>
+                            </div>
+                            <div class="h-[1px] bg-white/5"></div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <h3 class="text-xl font-headline font-bold text-vault-danger" id="dangerousCount">0</h3>
+                                    <p class="text-[9px] font-bold uppercase tracking-widest text-gray-600">Threats</p>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-headline font-bold text-vault-cyan" id="blockedCount">0</h3>
+                                    <p class="text-[9px] font-bold uppercase tracking-widest text-gray-600">Inhibited</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Severity Meters -->
+                <div class="vault-panel p-6 border-white/5">
+                    <h3 class="text-[10px] font-bold tracking-[0.3em] text-gray-500 uppercase mb-8 flex items-center gap-3">
+                        <span class="material-symbols-outlined text-sm text-vault-accent">insights</span>
+                        Severity Distribution
+                    </h3>
+                    <div class="space-y-6" id="severityBreakdown">
+                        <!-- Loading -->
+                        <div class="flex flex-col gap-4">
+                            <div class="h-1 bg-white/5 w-full"></div>
+                            <div class="h-1 bg-white/5 w-2/3"></div>
+                            <div class="h-1 bg-white/5 w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Integrity Shield Overlay -->
+                <div class="vault-panel p-6 bg-vault-accent/5 border border-vault-accent/20 group hover:border-vault-accent/40 transition-all">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="material-symbols-outlined text-vault-accent animate-pulse">shield_locked</span>
+                        <h4 class="text-[10px] font-bold text-vault-accent uppercase tracking-widest">Integrity Active</h4>
+                    </div>
+                    <p class="text-[11px] leading-relaxed text-gray-500 italic mb-4">
+                        All kernel activities are being enqueued via vault-audit-stream. Hashing: SHA-384.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-2 py-1 bg-vault-black border border-white/5 text-[8px] font-mono text-gray-500">AES_XTS_256</span>
+                        <span class="px-2 py-1 bg-vault-black border border-white/5 text-[8px] font-mono text-gray-500">KMS_VAULT_LIVE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Middle: Live Feed -->
+            <div class="col-span-12 lg:col-span-6">
+                <div class="vault-panel h-[800px] flex flex-col border-white/10 relative overflow-hidden">
+                    <!-- Deco corners -->
+                    <div class="absolute top-0 left-0 w-4 h-4 border-t border-l border-vault-accent/30 pointer-events-none"></div>
+                    <div class="absolute top-0 right-0 w-4 h-4 border-t border-r border-vault-accent/30 pointer-events-none"></div>
+                    <div class="absolute bottom-0 left-0 w-4 h-4 border-b border-l border-vault-accent/30 pointer-events-none"></div>
+                    <div class="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-vault-accent/30 pointer-events-none"></div>
+
+                    <div class="flex items-center justify-between px-8 py-5 border-b border-white/5 bg-vault-black/30 backdrop-blur-md">
+                        <div class="flex items-center gap-4">
+                            <div class="relative">
+                                <span class="material-symbols-outlined text-vault-cyan">terminal</span>
+                                <div class="absolute inset-0 bg-vault-cyan/20 blur-md pointer-events-none"></div>
+                            </div>
+                            <h2 class="text-[11px] font-bold tracking-[0.4em] text-white uppercase font-headline">Intelligence Stream // Live Findings</h2>
+                        </div>
+                        <div class="flex items-center gap-6">
+                           <div class="flex items-center gap-2">
+                               <div class="w-1.5 h-1.5 rounded-full bg-vault-accent animate-ping"></div>
+                               <span class="text-[9px] font-bold text-vault-accent uppercase tracking-widest">Listening...</span>
+                           </div>
+                        </div>
+                    </div>
+
+                    <div id="findingsList" class="flex-grow overflow-y-auto p-0 scroll-smooth">
+                        <div class="flex flex-col items-center justify-center h-full text-gray-600 gap-4">
+                            <span class="material-symbols-outlined text-4xl animate-spin text-vault-accent/20">rebase_edit</span>
+                            <span class="text-[10px] font-bold tracking-[0.5em] uppercase opacity-50">Calibrating sensors...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Analytics & Patterns -->
+            <div class="col-span-12 lg:col-span-3 space-y-6">
+                <!-- Critical Counter -->
+                <div class="vault-panel p-6 border-white/5 relative bg-vault-danger/5">
+                    <div class="flex justify-between items-center mb-8">
+                        <h3 class="text-[10px] font-bold tracking-[0.3em] text-vault-danger uppercase">Critical Findings</h3>
+                        <span class="material-symbols-outlined text-vault-danger animate-flicker">emergency_home</span>
+                    </div>
+                    <div class="flex items-baseline gap-4">
+                        <span class="text-6xl font-headline font-bold text-white leading-none" id="criticalCount">0</span>
+                        <span class="text-[10px] text-vault-danger font-bold uppercase tracking-widest">High Risk Events</span>
+                    </div>
+                    <div class="mt-6 flex gap-1">
+                        <div class="flex-1 h-0.5 bg-vault-danger/20"></div>
+                        <div class="flex-1 h-0.5 bg-vault-danger/50 animate-pulse"></div>
+                        <div class="flex-1 h-0.5 bg-vault-danger/20"></div>
+                    </div>
+                </div>
+
+                <!-- Category Heatmap -->
+                <div class="vault-panel p-6 border-white/5 flex flex-col h-[525px]">
+                    <h3 class="text-[10px] font-bold tracking-[0.3em] text-gray-500 uppercase mb-8 flex items-center gap-3">
+                        <span class="material-symbols-outlined text-sm text-vault-cyan">grid_view</span>
+                        Tactical Breakdown
+                    </h3>
+                    <div id="categoryBreakdown" class="flex-grow space-y-1 overflow-y-auto pr-2 custom-scroll">
+                        <!-- Content injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Decoy: Coordinate System -->
+                <div class="vault-panel p-4 border-dashed border-white/5 bg-transparent opacity-20 pointer-events-none select-none">
+                    <div class="flex justify-between text-[8px] font-mono uppercase tracking-[0.3em] text-gray-600 mb-2">
+                        <span>Grid Reference: 77-Alpha-9</span>
+                        <span>S-00124</span>
+                    </div>
+                    <div class="aspect-video border border-white/5 relative overflow-hidden flex flex-col items-center justify-center">
+                        <div class="absolute inset-x-0 h-[1px] bg-white/5 top-1/2"></div>
+                        <div class="absolute inset-y-0 w-[1px] bg-white/5 left-1/2"></div>
+                        <div class="w-8 h-8 rounded-full border border-vault-accent/20 animate-pulse"></div>
+                        <div class="text-[7px] text-gray-700 font-mono mt-2 tracking-widest underline">TARGETING_ACTIVE</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- UI Overlay Footer -->
+    <footer class="fixed bottom-0 w-full bg-vault-black/80 backdrop-blur-md border-t border-white/5 py-2 px-6 z-40">
+        <div class="max-w-[1800px] mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-6">
+                <span class="text-[8px] font-mono text-gray-600 uppercase tracking-widest">User ID: REDACTED</span>
+                <span class="text-[8px] font-mono text-gray-600 uppercase tracking-widest">Session: ${Math.random().toString(36).substring(7).toUpperCase()}</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-1 h-1 rounded-full bg-vault-cyan"></div>
+                    <span class="text-[8px] font-mono text-vault-cyan uppercase tracking-[0.2em]">Telemetry: Encrypted</span>
+                </div>
+                <div class="w-[1px] h-3 bg-white/10"></div>
+                <span class="text-[8px] font-mono text-gray-500 uppercase tracking-widest">Vault OS 2026.4 v9.2</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch('/api/audit/security-summary');
+                const data = await res.json();
+
+                // Stats
+                animateValue('totalExecs', 0, data.totalExecutions || 0, 1000);
+                animateValue('dangerousCount', 0, data.dangerousExecutions || 0, 1000);
+                animateValue('blockedCount', 0, data.blockedExecutions || 0, 1000);
+                animateValue('criticalCount', 0, (data.findingsBySeverity?.critical || 0), 1000);
+
+                // Findings List
+                const findingsList = document.getElementById('findingsList');
+                if (data.recentFindings && data.recentFindings.length > 0) {
+                    findingsList.innerHTML = data.recentFindings.map((f, idx) => {
+                        const isCritical = f.severity === 'critical';
+                        const accentColor = isCritical ? 'vault-danger' : f.severity === 'high' ? 'vault-accent' : 'vault-cyan';
+                        const borderOpacity = isCritical ? 'border-vault-danger/30' : 'border-white/10';
+                        
+                        return \`
+                            <div class="group relative px-8 py-6 border-b border-white/5 hover:bg-white/[0.02] transition-colors overflow-hidden">
+                                <div class="absolute left-0 top-0 w-1 h-full bg-\${accentColor} opacity-20 group-hover:opacity-100 transition-opacity"></div>
+                                
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center gap-4">
+                                        <span class="px-2 py-0.5 border border-\${accentColor}/30 text-[9px] font-bold text-\${accentColor} uppercase tracking-widest bg-\${accentColor}/5">
+                                            \${f.severity}
+                                        </span>
+                                        <span class="text-xs font-headline font-bold text-white tracking-wide uppercase">\${escapeHtml(f.category)}</span>
+                                    </div>
+                                    <span class="text-[9px] font-mono text-gray-600">\${new Date(f.timestamp).toLocaleTimeString()}</span>
+                                </div>
+                                
+                                <p class="text-[12px] text-gray-500 leading-relaxed font-light mb-4 group-hover:text-gray-300 transition-colors">
+                                    \${escapeHtml(f.description)}
+                                </p>
+                                
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-4">
+                                        <span class="text-[8px] font-mono text-gray-700 tracking-tighter uppercase">ID: \${f.executionId.substring(0, 12)}...</span>
+                                        <div class="w-1 h-1 rounded-full bg-gray-800"></div>
+                                        <span class="text-[8px] font-mono text-gray-700 uppercase tracking-widest">Hashed Payload</span>
+                                    </div>
+                                    <button class="text-[9px] font-bold text-\${accentColor} uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-all hover:underline underline-offset-4">
+                                        Inspect Block
+                                    </button>
+                                </div>
+                            </div>
+                        \`;
+                    }).join('');
+                } else {
+                    findingsList.innerHTML = \`
+                        <div class="flex flex-col items-center justify-center h-full text-gray-600 gap-4 opacity-30">
+                            <span class="material-symbols-outlined text-6xl">verified_user</span>
+                            <span class="text-[10px] font-bold tracking-[0.5em] uppercase">Security Integrity Uncompromised</span>
+                        </div>
+                    \`;
+                }
+
+                // Severity Breakdown
+                const sev = data.findingsBySeverity || {};
+                const maxSev = Math.max(...Object.values(sev), 1);
+                const sevOrder = ['critical', 'high', 'medium', 'low'];
+                
+                document.getElementById('severityBreakdown').innerHTML = sevOrder.map(s => {
+                    const count = sev[s] || 0;
+                    const percent = (count / maxSev) * 100;
+                    const color = s === 'critical' ? 'bg-vault-danger shadow-[0_0_10px_rgba(255,59,48,0.3)]' : 
+                                  s === 'high' ? 'bg-vault-accent shadow-[0_0_10px_rgba(255,157,0,0.3)]' : 
+                                  'bg-vault-cyan shadow-[0_0_10px_rgba(0,242,255,0.3)]';
+                    const text = s === 'critical' ? 'text-vault-danger' : 
+                                 s === 'high' ? 'text-vault-accent' : 
+                                 'text-vault-cyan';
+
+                    return \`
+                        <div class="group">
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-[9px] font-bold tracking-[0.2em] text-gray-600 uppercase group-hover:text-gray-400 transition-colors">\${s}</span>
+                                <span class="text-[10px] font-mono font-bold \${text}">\${count}</span>
+                            </div>
+                            <div class="h-[3px] w-full bg-white/5 relative overflow-hidden">
+                                <div class="h-full \${color} transition-all duration-700 ease-out" style="width: \${percent}%"></div>
+                            </div>
+                        </div>
+                    \`;
+                }).join('');
+
+                // Category Breakdown
+                const cats = data.findingsByCategory || {};
+                document.getElementById('categoryBreakdown').innerHTML = Object.entries(cats)
+                    .sort((a,b) => b[1] - a[1])
+                    .map(([name, count]) => \`
+                        <div class="flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/[0.01] transition-all px-1">
+                            <span class="text-[10px] text-gray-500 group-hover:text-white transition-colors truncate max-w-[80%]" title="\${name}">\${escapeHtml(name)}</span>
+                            <span class="text-[10px] font-mono font-bold text-vault-accent">\${count}</span>
+                        </div>
+                    \`).join('') || \`
+                        <div class="flex flex-col items-center justify-center h-full opacity-20">
+                            <span class="text-[10px] font-bold uppercase tracking-widest">No Pattern Data</span>
+                        </div>
+                    \`;
+
+            } catch (e) {
+                console.error('Core Telemetry Link Error:', e);
+            }
+        }
+
+        function animateValue(id, start, end, duration) {
+            const obj = document.getElementById(id);
+            if (!obj) return;
+            if (obj._timer) clearInterval(obj._timer);
+            if (start === end) {
+                obj.innerHTML = end.toLocaleString();
+                return;
+            }
+            const range = end - start;
+            let current = start;
+            const increment = end > start ? 1 : -1;
+            const stepTime = Math.abs(Math.floor(duration / (range === 0 ? 1 : range)));
+            obj._timer = setInterval(() => {
+                current += increment;
+                obj.innerHTML = current.toLocaleString();
+                if (current === end) {
+                    clearInterval(obj._timer);
+                }
+            }, Math.max(stepTime, 20));
+        }
+
+        loadData();
+        setInterval(loadData, 8000);
+    </script>
 </body>
 </html>`;
 }

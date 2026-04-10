@@ -11,7 +11,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/amafjarkasi/sandbox-ai-wasm/pulls)
 
-Execute untrusted JavaScript safely in isolated WASM sandboxes with multi-engine support, real-time streaming, security policy enforcement, and a built-in AI agent interface.
+Execute untrusted JavaScript safely in isolated WASM sandboxes with multi-engine support, real-time streaming, security policy enforcement, and the high-fidelity **Luminescent Vault** monitoring dashboard.
 
 [Getting Started](#getting-started) •
 [API Reference](#api-reference) •
@@ -90,9 +90,9 @@ The server starts on `http://localhost:3000`:
 
 | Endpoint | Description |
 |----------|-------------|
-| `http://localhost:3000/dashboard` | Monitoring dashboard |
-| `http://localhost:3000/security` | Security findings dashboard |
-| `http://localhost:3000/api/stats` | Server statistics |
+| `http://localhost:3000/dashboard` | Luminescent Vault Monitoring Dashboard |
+| `http://localhost:3000/security` | Luminescent Vault Security Dashboard |
+| `http://localhost:3000/api/stats` | Real-time Server Statistics |
 
 ### Your first execution
 
@@ -226,8 +226,8 @@ The platform logs deep structural and security telemetry for every executed scri
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/dashboard` | Real-time monitoring: executions, performance, engine usage |
-| `GET` | `/security` | Security findings with auto-refresh (5s polling) |
+| `GET` | `/dashboard` | Luminescent Vault: Real-time execution monitor & performance telemetry. |
+| `GET` | `/security` | Security Vault: Threat detection analytics & categorical breakdown. |
 
 ---
 
