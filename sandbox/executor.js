@@ -10,7 +10,6 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { promisify } = require("node:util");
 const { AuditLogger } = require("../lib/audit");
-const { EngineManager } = require("../lib/engines");
 const { AstAnalyzer } = require("./analyzer");
 
 const fsPromises = fs.promises;
@@ -38,7 +37,6 @@ class Executor {
     this.activeExecutions = new Map();
     this.cacheMaxSize = 100;
     this.maxResults = 1000;
-    this.engineManager = EngineManager.getInstance();
     this.astAnalyzer = new AstAnalyzer();
   }
 
