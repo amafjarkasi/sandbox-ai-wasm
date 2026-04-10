@@ -284,7 +284,7 @@ const policy = {
 
 ## 🏗️ Architecture
 
-![SandboxAI Architecture](public/architecture.png)
+![SandboxAI Architecture](https://raw.githubusercontent.com/amafjarkasi/sandbox-ai-wasm/master/public/architecture.png)
 
 **Layer Overview:**
 
