@@ -1,0 +1,39 @@
+{
+  "executionId": "exec_c5db1e846962",
+  "startTime": "2026-04-09T14:56:12.090Z",
+  "params": {
+    "engine": "v8",
+    "policy": "standard",
+    "codeLength": 3074,
+    "codeHash": "98ff2aebf5449ab1"
+  },
+  "events": [],
+  "securityFindings": [],
+  "actions": [
+    {
+      "action": "execution_start",
+      "timestamp": "2026-04-09T14:56:12.093Z",
+      "details": {
+        "engine": "v8",
+        "timeout": 15000
+      }
+    },
+    {
+      "action": "execution_complete",
+      "timestamp": "2026-04-09T14:56:12.313Z",
+      "details": {
+        "duration_ms": 221,
+        "outputLength": 950
+      }
+    }
+  ],
+  "status": "completed",
+  "endTime": "2026-04-09T14:56:12.314Z",
+  "result": {
+    "status": "completed",
+    "duration_ms": 221,
+    "exit_code": 0,
+    "outputLength": 950,
+    "error": null
+  }
+}
