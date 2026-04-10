@@ -1,0 +1,18 @@
+{
+  "name": "sandboxai",
+  "version": "0.1.0",
+  "description": "Secure AI code execution platform powered by Edge.js WASM sandboxing",
+  "main": "server.js",
+  "scripts": {
+    "start": "edge server.js",
+    "start:safe": "edge --safe server.js",
+    "dev": "edge --run dev server.js",
+    "example:quick": "edge examples/quick-run.js",
+    "example:agent": "edge examples/ai-agent.js",
+    "example:pipeline": "edge examples/data-pipeline.js"
+  },
+  "keywords": ["edgejs", "wasm", "sandbox", "ai", "code-execution", "serverless"],
+  "author": "SandboxAI",
+  "license": "MIT",
+  "dependencies": {}
+}
