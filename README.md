@@ -179,14 +179,48 @@ event: complete
 data: {"id": "exec_abc123", "status": "completed", "durationMs": 45}
 ```
 
-### Results & Stats
+### Audit & Telemetry
+
+The platform logs deep structural and security telemetry for every executed script via integrated AST parsing and regex analysis.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/audit/execution/:id` | Retrieve the complete audit log for a specific execution, including all AST telemetry and security findings. |
+| `GET` | `/api/audit/executions` | List histories for all cached execution audits. |
+| `GET` | `/api/audit/security-summary` | Platform-wide security findings grouped by severity and category, alongside recent threats. |
+| `GET` | `/api/audit/stats` | Raw operational statistics across all logged audits. |
+| `GET` | `/api/reports/execution/:id` | Generate a formatted execution report (supports `?format=json` or `?format=csv`). |
+
+**Example AST Telemetry Payload (`/api/audit/execution/:id`):**
+
+```json
+{
+  "executionId": "exec_a1b2c3",
+  "astTelemetry": {
+    "isValid": true,
+    "accessedIdentifiers": ["process", "require"],
+    "metrics": {
+      "loopCount": 2,
+      "functionCount": 1,
+      "astNodeCount": 45
+    },
+    "flags": {
+      "hasEval": false,
+      "hasRequire": true,
+      "hasProcess": true
+    }
+  },
+  "securityFindings": []
+}
+```
+
+### System & Results
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/result/:id` | Retrieve cached execution result by ID |
-| `GET` | `/api/stats` | Execution counts, engine usage, avg duration |
-| `GET` | `/api/engines` | Engine availability and usage statistics |
-| `GET` | `/api/audit/security-summary` | Findings by severity/category, recent threats |
+| `GET` | `/api/stats` | Execution counts, engine usage, average durations |
+| `GET` | `/api/engines` | Engine availability and exact usage count statistics |
 
 ### Dashboards
 

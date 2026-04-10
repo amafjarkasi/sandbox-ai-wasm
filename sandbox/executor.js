@@ -10,6 +10,8 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { promisify } = require("node:util");
 const { AuditLogger } = require("../lib/audit");
+const { EngineManager } = require("../lib/engines");
+const { AstAnalyzer } = require("./analyzer");
 
 const fsPromises = fs.promises;
 const mkdtemp = promisify(fs.mkdtemp);
@@ -36,6 +38,8 @@ class Executor {
     this.activeExecutions = new Map();
     this.cacheMaxSize = 100;
     this.maxResults = 1000;
+    this.engineManager = EngineManager.getInstance();
+    this.astAnalyzer = new AstAnalyzer();
   }
 
   /**
@@ -102,8 +106,11 @@ class Executor {
       }
     }
 
+    // AST Analysis for deep audit telemetry
+    const astSummary = this.astAnalyzer.analyze(code);
+
     // Start audit trail
-    this.auditLogger.startExecutionAudit(id, { code, engine, policy, timeout, memory });
+    this.auditLogger.startExecutionAudit(id, { code, engine, policy, timeout, memory, astSummary });
 
     // Validate engine availability
     const engineInfo = this.engineManager.getEngine(engine);
@@ -240,7 +247,8 @@ class Executor {
     const startTime = performance.now();
     const resolvedPolicy = this.policyEngine.getPolicy(policy || "standard");
 
-    this.auditLogger.startExecutionAudit(id, { code, engine, policy, timeout, memory });
+    const astSummary = this.astAnalyzer.analyze(code);
+    this.auditLogger.startExecutionAudit(id, { code, engine, policy, timeout, memory, astSummary });
 
     this._runInSandbox({
       id,

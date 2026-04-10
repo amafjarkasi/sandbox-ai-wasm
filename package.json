@@ -11,8 +11,18 @@
     "example:agent": "edge examples/ai-agent.js",
     "example:pipeline": "edge examples/data-pipeline.js"
   },
-  "keywords": ["edgejs", "wasm", "sandbox", "ai", "code-execution", "serverless"],
+  "keywords": [
+    "edgejs",
+    "wasm",
+    "sandbox",
+    "ai",
+    "code-execution",
+    "serverless"
+  ],
   "author": "SandboxAI",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {
+    "acorn": "^8.16.0",
+    "acorn-walk": "^8.3.5"
+  }
 }
