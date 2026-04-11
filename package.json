@@ -7,9 +7,9 @@
     "start": "edge server.js",
     "start:safe": "edge --safe server.js",
     "dev": "edge --run dev server.js",
-    "example:quick": "edge examples/quick-run.js",
-    "example:agent": "edge examples/ai-agent.js",
-    "example:pipeline": "edge examples/data-pipeline.js"
+    "example:quick": "edge examples/basic/quick-run.js",
+    "example:agent": "edge examples/basic/ai-agent.js",
+    "example:pipeline": "edge examples/basic/data-pipeline.js"
   },
   "keywords": [
     "edgejs",

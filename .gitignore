@@ -10,7 +10,10 @@ pids
 
 # Logs
 logs/
+legacy/logs/
 *.log
+*.jsonl
+execution-exec_*.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
